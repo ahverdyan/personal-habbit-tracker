@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "410564122988",
+    "project_id": "phtb-336e3",
+    "storage_bucket": "phtb-336e3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:410564122988:android:f5440f16c2bf46da8f3b49",
+        "android_client_info": {
+          "package_name": "com.example.pht"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA4p4FOjs87o3qakUM3WBrJHYmJpCGE0Zw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

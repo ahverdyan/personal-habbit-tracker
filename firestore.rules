@@ -1,0 +1,151 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Вспомогательные функции ───────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUserName(name) {
+      return name is string
+        && name.size() >= 2
+        && name.size() <= 30
+        && name.matches('^[a-zA-Zа-яА-ЯёЁ0-9\\s]+$');
+    }
+
+    function isValidEmail(email) {
+      return email is string
+        && email.matches('^[^@]+@[^@]+\\.[^@]+$');
+    }
+
+    function isValidHabitName(name) {
+      return name is string
+        && name.size() >= 2
+        && name.size() <= 50
+        && name.matches('^[a-zA-Zа-яА-ЯёЁ0-9\\s\\-\\.,!?]+$');
+    }
+
+    function isValidPriority(p) {
+      return p is string && p in ['высокий', 'средний', 'низкий'];
+    }
+
+    function isTimestampList(list, maxSize) {
+      return list is list
+        && list.size() <= maxSize
+        && (list.size() == 0 || list[0] is timestamp);
+    }
+
+    // ─── users ─────────────────────────────────────────────────────────────
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+
+      allow create: if isOwner(userId)
+        && isValidUserName(request.resource.data.name)
+        && isValidEmail(request.resource.data.email)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.experience is number
+        && request.resource.data.experience == 0
+        && request.resource.data.level is string
+        && request.resource.data.level == 'beginner';
+        // created_at: FieldValue.serverTimestamp() — не проверяем в rules
+
+      // Профиль: имя и/или email (set merge)
+      allow update: if isOwner(userId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['name', 'email'])
+        && isValidUserName(request.resource.data.name)
+        && isValidEmail(request.resource.data.email);
+
+      // Сброс прогресса: experience + level
+      allow update: if isOwner(userId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['experience', 'level'])
+        && request.resource.data.experience is number
+        && request.resource.data.experience == 0
+        && request.resource.data.level is string
+        && request.resource.data.level == 'beginner';
+
+      allow delete: if false;
+    }
+
+    // ─── habits ──────────────────────────────────────────────────────────────
+
+    match /habits/{habitId} {
+      allow read: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && isValidHabitName(request.resource.data.name)
+        && isValidPriority(request.resource.data.priority)
+        && request.resource.data.completed is bool
+        && request.resource.data.completed == false
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.startDate is timestamp
+        && isTimestampList(request.resource.data.completedDates, 0);
+
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['name', 'priority', 'startDate', 'completed', 'completedDates'])
+        && isValidHabitName(request.resource.data.name)
+        && isValidPriority(request.resource.data.priority)
+        && request.resource.data.completed is bool
+        && request.resource.data.startDate is timestamp
+        && isTimestampList(request.resource.data.completedDates, 1000);
+
+      allow delete: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // ─── achievements (справочник, только чтение) ───────────────────────────
+
+    match /achievements/{achievementId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ─── user_achievements ───────────────────────────────────────────────────
+
+    match /user_achievements/{userAchievementId} {
+      allow read: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.achievementId is string
+        && request.resource.data.achievementId.size() > 0
+        && request.resource.data.currentProgress is number
+        && request.resource.data.currentProgress >= 0
+        && request.resource.data.isUnlocked is bool;
+        // createdAt / unlockedAt: serverTimestamp — не проверяем в rules
+
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['currentProgress', 'isUnlocked', 'unlockedAt'])
+        && request.resource.data.currentProgress is number
+        && request.resource.data.isUnlocked is bool;
+
+      // Нужно для «Сбросить прогресс»
+      allow delete: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // ─── daily_completions (если не используете — доступ закрыт) ─────────────
+
+    match /daily_completions/{entryId} {
+      allow read, write: if false;
+    }
+  }
+}
